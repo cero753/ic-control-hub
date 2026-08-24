@@ -36,13 +36,20 @@ Environment variables (must be prefixed `VITE_`):
 
 The four source Excel frameworks are parsed into `src/data/controls.json` by `scripts/extract_controls.py` and seeded into the `controls` table. Tables: `profiles`, `controls`, `requests`, `approvals`.
 
-### Roles
+### Roles & auth
 
-New sign-ups are **Requestors** by default. To promote a user to **Approver**:
+New sign-ups are **Requestors** — this is enforced **server-side** by the `handle_new_user`
+trigger, which ignores any client-supplied role in the signup metadata (the anon key is public,
+so the role must not be trusted from the client). To promote a user to **Approver**:
 
 ```sql
 update public.profiles set role = 'approver' where email = 'someone@example.com';
 ```
+
+New users are **auto-confirmed** on signup (an `auto_confirm_user` trigger sets
+`email_confirmed_at`), so they can sign in immediately — the project has no custom SMTP and the
+built-in mailer is rate-limited. For a production deployment with real email delivery, remove that
+trigger and enable "Confirm email" in the Supabase Auth settings.
 
 ## Demo accounts
 

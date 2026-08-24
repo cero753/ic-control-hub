@@ -25,13 +25,20 @@ export default function Login() {
     setBusy(true)
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: fullName, role: 'requestor' } },
         })
         if (error) throw error
-        setInfo('Account created. You can now sign in.')
+        // New accounts are auto-confirmed, so signUp returns a session and the user
+        // is logged straight in. If confirmation were ever required (no session),
+        // fall back to prompting them to sign in.
+        if (data.session) {
+          navigate('/controls', { replace: true })
+          return
+        }
+        setInfo('Account created. Please check your email to confirm, then sign in.')
         setMode('login')
       } else {
         const { error } = await supabase.auth.signInWithPassword({
