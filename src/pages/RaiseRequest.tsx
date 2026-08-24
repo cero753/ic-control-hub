@@ -144,8 +144,9 @@ export default function RaiseRequest() {
                 placeholder="e.g. Office Rent - Bangalore"
               />
               <div>
-                <Label>Parent group (Tally)</Label>
+                <Label htmlFor="f-parent-group">Parent group (Tally)</Label>
                 <select
+                  id="f-parent-group"
                   value={parentGroup}
                   onChange={(e) => setParentGroup(e.target.value)}
                   className={inputClass}
@@ -165,8 +166,9 @@ export default function RaiseRequest() {
                   type="number"
                 />
                 <div>
-                  <Label>Balance type</Label>
+                  <Label htmlFor="f-balance-type">Balance type</Label>
                   <select
+                    id="f-balance-type"
                     value={ledgerType}
                     onChange={(e) =>
                       setLedgerType(e.target.value as 'Dr' | 'Cr')
@@ -182,8 +184,9 @@ export default function RaiseRequest() {
           ) : (
             <>
               <div>
-                <Label>Details / justification</Label>
+                <Label htmlFor="f-details">Details / justification</Label>
                 <textarea
+                  id="f-details"
                   required
                   value={details}
                   onChange={(e) => setDetails(e.target.value)}
@@ -210,8 +213,9 @@ export default function RaiseRequest() {
           )}
 
           <div>
-            <Label>Notes for approver (optional)</Label>
+            <Label htmlFor="f-notes">Notes for approver (optional)</Label>
             <textarea
+              id="f-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -249,9 +253,22 @@ export default function RaiseRequest() {
 const inputClass =
   'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
 
-function Label({ children }: { children: React.ReactNode }) {
+function slugId(label: string): string {
+  return 'f-' + label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function Label({
+  children,
+  htmlFor,
+}: {
+  children: React.ReactNode
+  htmlFor?: string
+}) {
   return (
-    <label className="mb-1 block text-sm font-medium text-slate-700">
+    <label
+      htmlFor={htmlFor}
+      className="mb-1 block text-sm font-medium text-slate-700"
+    >
       {children}
     </label>
   )
@@ -272,10 +289,12 @@ function TextField({
   required?: boolean
   placeholder?: string
 }) {
+  const id = slugId(label)
   return (
     <div>
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <input
+        id={id}
         type={type}
         required={required}
         placeholder={placeholder}
