@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -15,7 +15,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
 
   if (session) {
-    navigate('/controls', { replace: true })
+    return <Navigate to="/controls" replace />
   }
 
   async function handleSubmit(e: React.FormEvent) {
