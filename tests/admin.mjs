@@ -28,6 +28,13 @@ async function signIn(email) {
   return { c, uid: data.user.id }
 }
 
+/** Like signIn but returns null instead of throwing — for asserting a login is refused. */
+async function trySignIn(email) {
+  const c = client()
+  const { data, error } = await c.auth.signInWithPassword({ email, password: PW })
+  return error ? null : { c, uid: data.user.id }
+}
+
 const createdIds = []
 
 console.log('\n== admin role + guard ==')
@@ -195,6 +202,71 @@ console.log('\n== admin role management ==')
     .update({ role: 'requestor' })
     .eq('id', admin.uid)
   ok(!!error, `last admin cannot be demoted (${error?.message ?? 'NO ERROR'})`)
+}
+
+console.log('\n== user deactivation (off-boarding without deleting history) ==')
+{
+  // A throwaway account we can safely lock and unlock.
+  const email = `deact_${String(Date.now()).slice(-7)}@ichub.com`
+  const { data: made, error: mkErr } = await admin.c.rpc('admin_create_user', {
+    p_email: email,
+    p_password: PW,
+    p_full_name: 'Deactivation Target',
+    p_role: 'requestor',
+  })
+  ok(!mkErr && !!made?.id, `provisioned a throwaway account (${mkErr?.message ?? 'ok'})`)
+  if (made?.id) createdIds.push(made.id)
+
+  ok(made?.deactivated_at === null, 'a new account starts active (deactivated_at is null)')
+
+  const before = await trySignIn(email)
+  ok(!!before?.uid, 'the new account can sign in before deactivation')
+
+  // Non-admins must not be able to lock anyone out.
+  const { error: reqErr } = await requestor.c.rpc('admin_set_user_active', {
+    p_user_id: made.id,
+    p_active: false,
+  })
+  ok(!!reqErr, `requestor cannot call admin_set_user_active (${reqErr?.message ?? 'NO ERROR'})`)
+  const { error: apprErr } = await approver.c.rpc('admin_set_user_active', {
+    p_user_id: made.id,
+    p_active: false,
+  })
+  ok(!!apprErr, `approver cannot call admin_set_user_active (${apprErr?.message ?? 'NO ERROR'})`)
+
+  const { data: off, error: offErr } = await admin.c.rpc('admin_set_user_active', {
+    p_user_id: made.id,
+    p_active: false,
+  })
+  ok(!offErr && !!off?.deactivated_at, `admin deactivates the account (${offErr?.message ?? 'ok'})`)
+
+  // The whole point: access is actually withdrawn, not just flagged in the UI.
+  const blocked = await trySignIn(email)
+  ok(!blocked, 'a deactivated account can NO LONGER sign in')
+
+  const { error: onErr } = await admin.c.rpc('admin_set_user_active', {
+    p_user_id: made.id,
+    p_active: true,
+  })
+  ok(!onErr, `admin reactivates the account (${onErr?.message ?? 'ok'})`)
+  const restored = await trySignIn(email)
+  ok(!!restored?.uid, 'a reactivated account can sign in again')
+}
+{
+  const { error } = await admin.c.rpc('admin_set_user_active', {
+    p_user_id: admin.uid,
+    p_active: false,
+  })
+  ok(!!error, `an admin cannot deactivate themselves (${error?.message ?? 'NO ERROR'})`)
+}
+{
+  // admin@ichub.com is the only admin, so it must be undeactivatable by any route.
+  const { data: admins } = await admin.c
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .is('deactivated_at', null)
+  ok(admins?.length === 1, `exactly one active admin exists (${admins?.length})`)
 }
 
 console.log('\ncreated test user ids (cleanup):', createdIds.join(', ') || 'none')

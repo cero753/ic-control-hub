@@ -16,6 +16,7 @@ export default function AdminUsers() {
   const [info, setInfo] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [showDeactivated, setShowDeactivated] = useState(false)
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -51,6 +52,42 @@ export default function AdminUsers() {
     load()
   }
 
+  /**
+   * Withdraw or restore access. Deliberately not a delete: profiles cascade to
+   * requests and approvals, so removing a user would erase the history of every
+   * request they raised and every approval they signed.
+   */
+  async function setActive(user: Profile, active: boolean) {
+    const who = user.full_name ?? user.email
+    if (
+      !active &&
+      !window.confirm(
+        `Deactivate ${who}? They will be signed out and blocked from signing in. ` +
+          `Their requests and approvals are kept, and you can reactivate them later.`,
+      )
+    )
+      return
+
+    setBusyId(user.id)
+    setError(null)
+    setInfo(null)
+    const { error } = await supabase.rpc('admin_set_user_active', {
+      p_user_id: user.id,
+      p_active: active,
+    })
+    setBusyId(null)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    setInfo(`${who} has been ${active ? 'reactivated' : 'deactivated'}.`)
+    load()
+  }
+
+  const visible = showDeactivated
+    ? users
+    : users.filter((u) => !u.deactivated_at)
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -58,16 +95,24 @@ export default function AdminUsers() {
           {ROLES.map((r) => (
             <span key={r.value} className="text-xs text-slate-500">
               <Badge color={roleColor(r.value)}>{r.label}</Badge>{' '}
-              {users.filter((u) => u.role === r.value).length}
+              {visible.filter((u) => u.role === r.value).length}
             </span>
           ))}
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          {showForm ? 'Cancel' : '+ Add account'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowDeactivated((s) => !s)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {showDeactivated ? 'Active only' : 'Show deactivated'}
+          </button>
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+          >
+            {showForm ? 'Cancel' : '+ Add account'}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -101,43 +146,81 @@ export default function AdminUsers() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Current role</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Created</th>
                 <th className="px-4 py-3">Change role</th>
+                <th className="px-4 py-3">Access</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {u.full_name ?? '—'}
-                    {u.id === me?.id && (
-                      <span className="ml-2 text-xs text-slate-400">(you)</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{u.email}</td>
-                  <td className="px-4 py-3">
-                    <Badge color={roleColor(u.role)}>{u.role}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {new Date(u.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      aria-label={`Role for ${u.email}`}
-                      value={u.role}
-                      disabled={busyId === u.id}
-                      onChange={(e) => changeRole(u, e.target.value as Role)}
-                      className="rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
+              {visible.map((u) => {
+                const inactive = !!u.deactivated_at
+                return (
+                  <tr
+                    key={u.id}
+                    className={inactive ? 'bg-slate-50/60' : 'hover:bg-slate-50'}
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {u.full_name ?? '—'}
+                      {u.id === me?.id && (
+                        <span className="ml-2 text-xs text-slate-400">
+                          (you)
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <Badge color={roleColor(u.role)}>{u.role}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {inactive ? (
+                        <Badge color="slate">Deactivated</Badge>
+                      ) : (
+                        <Badge color="green">Active</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {new Date(u.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        aria-label={`Role for ${u.email}`}
+                        value={u.role}
+                        // A deactivated user cannot sign in, so granting them a
+                        // role would be misleading. Reactivate first.
+                        disabled={busyId === u.id || inactive}
+                        onChange={(e) => changeRole(u, e.target.value as Role)}
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        aria-label={`${inactive ? 'Reactivate' : 'Deactivate'} ${u.email}`}
+                        onClick={() => setActive(u, inactive)}
+                        disabled={busyId === u.id || u.id === me?.id}
+                        title={
+                          u.id === me?.id
+                            ? 'You cannot deactivate your own account'
+                            : undefined
+                        }
+                        className={`rounded-lg px-3 py-1 text-sm font-medium disabled:opacity-40 ${
+                          inactive
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'border border-rose-300 text-rose-700 hover:bg-rose-50'
+                        }`}
+                      >
+                        {inactive ? 'Reactivate' : 'Deactivate'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

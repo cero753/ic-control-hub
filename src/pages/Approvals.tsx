@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import type { RequestRow, RequestStatus } from '../lib/types'
-import { Spinner } from '../components/ui'
+import type { RequestRow } from '../lib/types'
+import { Spinner, StatusTabs, TallyBundleButton } from '../components/ui'
+import { matchesStatusTab, type StatusTab } from '../lib/requestFilters'
 import { RequestCard } from '../components/RequestCard'
-
-const TABS: { key: RequestStatus | 'all'; label: string }[] = [
-  { key: 'pending', label: 'Pending' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'rejected', label: 'Rejected' },
-  { key: 'completed', label: 'Completed' },
-  { key: 'all', label: 'All' },
-]
 
 export default function Approvals() {
   const { session } = useAuth()
   const [requests, setRequests] = useState<RequestRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<RequestStatus | 'all'>('pending')
+  const [tab, setTab] = useState<StatusTab>('pending')
   const [comments, setComments] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -67,39 +60,22 @@ export default function Approvals() {
     }
   }
 
-  const filtered =
-    tab === 'all' ? requests : requests.filter((r) => r.status === tab)
+  const filtered = requests.filter((r) => matchesStatusTab(r, tab))
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Approvals Inbox</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Review and decide on requests raised across all controls.
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Approvals Inbox</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Review and decide on requests raised across all controls.
+          </p>
+        </div>
+        {/* Every approved ledger in the current tab as one Tally import. */}
+        <TallyBundleButton requests={filtered} />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-1">
-        {TABS.map((t) => {
-          const count =
-            t.key === 'all'
-              ? requests.length
-              : requests.filter((r) => r.status === t.key).length
-          return (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-                tab === t.key
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {t.label} ({count})
-            </button>
-          )
-        })}
-      </div>
+      <StatusTabs requests={requests} active={tab} onSelect={setTab} />
 
       {error && (
         <p className="mb-4 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">

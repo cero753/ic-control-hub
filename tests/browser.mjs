@@ -91,7 +91,22 @@ await rpage.fill('input[placeholder*="Create ledger"]', drName).catch(async () =
 const nameInput = rpage.getByLabel('Ledger name')
 await nameInput.fill(drName)
 await rpage.getByLabel('Parent group (Tally)').selectOption('Indirect Expenses')
-await rpage.getByLabel('Opening balance').fill('2500')
+
+// The amount used to be <input type="number">, which shows spinner arrows and
+// resists manual entry. Type it a character at a time to prove it takes a
+// hand-keyed figure with decimals, and that letters are rejected.
+const balance = rpage.getByLabel('Opening balance')
+ok((await balance.getAttribute('type')) === 'text', 'opening balance is not a spinner number input')
+ok((await balance.getAttribute('inputmode')) === 'decimal', 'opening balance still gets a numeric keypad')
+await balance.click()
+await balance.pressSequentially('2500.50', { delay: 20 })
+ok((await balance.inputValue()) === '2500.50', 'opening balance accepts a manually typed decimal')
+await balance.pressSequentially('abc', { delay: 20 })
+ok((await balance.inputValue()) === '2500.50', 'non-numeric keystrokes are ignored')
+await balance.fill('')
+await balance.pressSequentially('2500', { delay: 20 })
+ok((await balance.inputValue()) === '2500', 'opening balance can be cleared and retyped')
+
 await rpage.getByLabel('Balance type').selectOption('Dr')
 await rpage.getByRole('button', { name: /Submit request/i }).click()
 await rpage.waitForURL('**/my-requests', { timeout: 15000 })

@@ -54,6 +54,8 @@ export interface Profile {
   email: string | null
   role: Role
   created_at: string
+  /** null while the account is active; set when an admin withdraws access. */
+  deactivated_at: string | null
 }
 
 export interface LedgerPayload {

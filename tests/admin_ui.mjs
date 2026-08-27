@@ -1,6 +1,7 @@
 // Admin portal end-to-end tests, plus XML download for every role.
 import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
+import { readFile } from 'node:fs/promises'
 
 const url = 'https://owfyawpxydjkmitookfp.supabase.co'
 const anon = 'sb_publishable_VbXaWcuRIvZsu2jQnsEPmg_WGcabzqg'
@@ -93,10 +94,14 @@ try {
 
   // ------------------------------------------------- create a new account
   console.log('\n== admin creates accounts ==')
-  const newApprover = `pa_${String(Date.now()).slice(-7)}@ichub.com`
+  const stamp = String(Date.now()).slice(-7)
+  const newApprover = `pa_${stamp}@ichub.com`
+  // The status banner identifies people by full_name, not email, so the name has to
+  // be unique per run for the banner assertions below to be unambiguous.
+  const newApproverName = `Portal Approver ${stamp}`
   createdUserEmails.push(newApprover)
   await admin.page.getByRole('button', { name: '+ Add account' }).click()
-  await admin.page.fill('#new-full-name', 'Portal Approver')
+  await admin.page.fill('#new-full-name', newApproverName)
   await admin.page.fill('#new-email', newApprover)
   await admin.page.fill('#new-password', PW)
   await admin.page.selectOption('#new-role', 'approver')
@@ -152,6 +157,73 @@ try {
     ok(true, 'admin promoted the account back to approver')
   }
 
+  // ------------------------------------------- deactivate / reactivate
+  console.log('\n== admin deactivates / reactivates an account ==')
+  {
+    const rowOf = (e) => admin.page.locator('table tbody tr', { hasText: e })
+    ok(/Active/.test(await rowOf(newApprover).innerText()), 'account shows an Active status badge')
+
+    // The window.confirm guard would otherwise block the automated click.
+    admin.page.on('dialog', (d) => d.accept())
+
+    await rowOf(newApprover).getByRole('button', { name: /Deactivate/i }).click()
+    await admin.page.waitForFunction(
+      (n) => (document.querySelector('main')?.innerText ?? '').includes(`${n} has been deactivated`),
+      newApproverName,
+      { timeout: 20000 },
+    )
+    ok(true, 'admin deactivated the account')
+
+    // Deactivated users drop out of the default list until you ask for them.
+    await admin.page.waitForFunction(
+      (e) => ![...document.querySelectorAll('table tbody tr')].some((r) => r.innerText.includes(e)),
+      newApprover,
+      { timeout: 20000 },
+    )
+    ok(true, 'deactivated account is hidden from the default Active-only list')
+
+    await admin.page.getByRole('button', { name: 'Show deactivated' }).click()
+    await admin.page.waitForFunction(
+      (e) => [...document.querySelectorAll('table tbody tr')].some((r) => r.innerText.includes(e)),
+      newApprover,
+      { timeout: 20000 },
+    )
+    ok(
+      /Deactivated/.test(await rowOf(newApprover).innerText()),
+      'account shows a Deactivated badge under Show deactivated',
+    )
+    ok(
+      await rowOf(newApprover).locator('select').isDisabled(),
+      'role cannot be changed while the account is deactivated',
+    )
+
+    // The account must actually be locked out, not merely flagged in the table.
+    const locked = createClient(url, anon, { auth: { persistSession: false } })
+    const { error: lockErr } = await locked.auth.signInWithPassword({ email: newApprover, password: PW })
+    ok(!!lockErr, `deactivated account cannot sign in (${lockErr?.message ?? 'NO ERROR'})`)
+
+    await rowOf(newApprover).getByRole('button', { name: /Reactivate/i }).click()
+    await admin.page.waitForFunction(
+      (n) => (document.querySelector('main')?.innerText ?? '').includes(`${n} has been reactivated`),
+      newApproverName,
+      { timeout: 20000 },
+    )
+    ok(true, 'admin reactivated the account')
+
+    const back = createClient(url, anon, { auth: { persistSession: false } })
+    const { error: backErr } = await back.auth.signInWithPassword({ email: newApprover, password: PW })
+    ok(!backErr, `reactivated account can sign in again (${backErr?.message ?? 'ok'})`)
+
+    // Locking yourself out has no recovery path, so the UI must not offer it.
+    ok(
+      await admin.page
+        .locator('table tbody tr', { hasText: 'admin@ichub.com' })
+        .getByRole('button', { name: /Deactivate/i })
+        .isDisabled(),
+      'admin cannot deactivate their own account from the UI',
+    )
+  }
+
   // ------------------------------------------------------ requests tab
   console.log('\n== admin all requests ==')
   await admin.page.getByRole('link', { name: 'All Requests' }).click()
@@ -175,6 +247,17 @@ try {
       admin.page.getByRole('button', { name: /Export CSV/i }).click(),
     ])
     ok(csv.suggestedFilename() === 'ic-control-hub-requests.csv', 'admin exports all requests as CSV')
+  }
+  {
+    // One file for the whole batch, not one download per approved ledger.
+    const [xmlDl] = await Promise.all([
+      admin.page.waitForEvent('download', { timeout: 20000 }),
+      admin.page.getByRole('button', { name: /Tally file \(\d+ ledgers?\)/i }).click(),
+    ])
+    const body = await readFile(await xmlDl.path(), 'utf-8')
+    ok(/^tally-ledgers-\d+\.xml$/.test(xmlDl.suggestedFilename()), 'admin downloads one consolidated Tally file')
+    ok((body.match(/<ENVELOPE>/g) || []).length === 1, 'consolidated admin file is a single envelope')
+    ok((body.match(/<TALLYMESSAGE/g) || []).length >= 1, 'consolidated admin file contains ledger masters')
   }
 
   // ------------------------------------------------- controls tab

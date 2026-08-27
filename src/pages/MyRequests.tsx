@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { RequestRow } from '../lib/types'
-import { Spinner } from '../components/ui'
+import { Spinner, StatusTabs, TallyBundleButton } from '../components/ui'
+import { matchesStatusTab, type StatusTab } from '../lib/requestFilters'
 import { RequestCard } from '../components/RequestCard'
 
 export default function MyRequests() {
   const { session } = useAuth()
   const [requests, setRequests] = useState<RequestRow[]>([])
+  const [tab, setTab] = useState<StatusTab>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +41,8 @@ export default function MyRequests() {
 
   if (loading) return <Spinner label="Loading your requests…" />
 
+  const filtered = requests.filter((r) => matchesStatusTab(r, tab))
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -48,12 +52,17 @@ export default function MyRequests() {
             Requests you have raised and their approval status.
           </p>
         </div>
-        <Link
-          to="/controls"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          + New request
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Bundles every approved ledger in the current tab — still there
+              after "Mark created in Tally", which is the point. */}
+          <TallyBundleButton requests={filtered} />
+          <Link
+            to="/controls"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+          >
+            + New request
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -61,6 +70,8 @@ export default function MyRequests() {
           {error}
         </p>
       )}
+
+      <StatusTabs requests={requests} active={tab} onSelect={setTab} />
 
       {requests.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 py-16 text-center">
@@ -72,9 +83,13 @@ export default function MyRequests() {
             Browse controls to raise your first request →
           </Link>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 py-16 text-center">
+          <p className="text-slate-500">No requests in this tab.</p>
+        </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {requests.map((req) => (
+          {filtered.map((req) => (
             <RequestCard key={req.id} req={req}>
               {req.status === 'approved' && (
                 <button

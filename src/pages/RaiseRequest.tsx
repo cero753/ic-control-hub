@@ -36,7 +36,10 @@ export default function RaiseRequest() {
   // ledger fields
   const [ledgerName, setLedgerName] = useState('')
   const [parentGroup, setParentGroup] = useState(TALLY_GROUPS[0])
-  const [openingBalance, setOpeningBalance] = useState('0')
+  // Empty, not '0': a pre-filled zero means typing an amount produces "02500"
+  // unless you first select the existing text. The "0.00" placeholder still
+  // signals the format, and buildLedgerXml already treats '' as 0.
+  const [openingBalance, setOpeningBalance] = useState('')
   const [ledgerType, setLedgerType] = useState<'Dr' | 'Cr'>('Dr')
   // generic fields
   const [details, setDetails] = useState('')
@@ -163,7 +166,8 @@ export default function RaiseRequest() {
                   label="Opening balance"
                   value={openingBalance}
                   onChange={setOpeningBalance}
-                  type="number"
+                  numeric
+                  placeholder="0.00"
                 />
                 <div>
                   <Label htmlFor="f-balance-type">Balance type</Label>
@@ -200,7 +204,8 @@ export default function RaiseRequest() {
                   label="Amount (optional)"
                   value={amount}
                   onChange={setAmount}
-                  type="number"
+                  numeric
+                  placeholder="0.00"
                 />
                 <TextField
                   label="Effective date (optional)"
@@ -274,6 +279,9 @@ function Label({
   )
 }
 
+/** Allows a partially typed figure: '', '-', '12', '12.', '12.34'. */
+const NUMERIC_INPUT = /^-?\d*\.?\d*$/
+
 function TextField({
   label,
   value,
@@ -281,6 +289,7 @@ function TextField({
   type = 'text',
   required = false,
   placeholder,
+  numeric = false,
 }: {
   label: string
   value: string
@@ -288,6 +297,13 @@ function TextField({
   type?: string
   required?: boolean
   placeholder?: string
+  /**
+   * Money field. Rendered as a text input rather than type="number" so it can be
+   * typed into freely: number inputs show spinner arrows, and in Chrome they also
+   * change value on scroll, which silently corrupts an amount the user already set.
+   * inputMode="decimal" still gets a numeric keypad on mobile.
+   */
+  numeric?: boolean
 }) {
   const id = slugId(label)
   return (
@@ -295,11 +311,16 @@ function TextField({
       <Label htmlFor={id}>{label}</Label>
       <input
         id={id}
-        type={type}
+        type={numeric ? 'text' : type}
+        inputMode={numeric ? 'decimal' : undefined}
         required={required}
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value
+          if (numeric && !NUMERIC_INPUT.test(v)) return
+          onChange(v)
+        }}
         className={inputClass}
       />
     </div>

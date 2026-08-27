@@ -1,24 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import type { RequestRow, RequestStatus } from '../../lib/types'
-import { Spinner } from '../../components/ui'
+import type { RequestRow } from '../../lib/types'
+import { Spinner, StatusTabs, TallyBundleButton } from '../../components/ui'
+import { matchesStatusTab, type StatusTab } from '../../lib/requestFilters'
 import { RequestCard } from '../../components/RequestCard'
-import { downloadCsv, downloadText } from '../../lib/download'
-import { buildLedgerXml } from '../../lib/tallyXml'
-
-const TABS: { key: RequestStatus | 'all'; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'rejected', label: 'Rejected' },
-  { key: 'completed', label: 'Completed' },
-]
+import { downloadCsv } from '../../lib/download'
 
 export default function AdminRequests() {
   const [requests, setRequests] = useState<RequestRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<RequestStatus | 'all'>('all')
+  const [tab, setTab] = useState<StatusTab>('all')
   const [q, setQ] = useState('')
 
   const load = useCallback(async () => {
@@ -40,7 +32,7 @@ export default function AdminRequests() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return requests
-      .filter((r) => tab === 'all' || r.status === tab)
+      .filter((r) => matchesStatusTab(r, tab))
       .filter((r) => {
         if (!needle) return true
         const hay = [
@@ -96,71 +88,21 @@ export default function AdminRequests() {
     )
   }
 
-  // Every approved ledger request in one file — Tally accepts many LEDGER blocks
-  // per envelope, but concatenating envelopes is not valid, so emit them
-  // individually as a simple bundle the admin can import one at a time.
-  const ledgerReady = filtered.filter(
-    (r) =>
-      r.controls?.request_type === 'ledger' &&
-      (r.status === 'approved' || r.status === 'completed') &&
-      !!(r.payload as { ledgerName?: string }).ledgerName,
-  )
-
-  function exportAllXml() {
-    ledgerReady.forEach((r, i) => {
-      const p = r.payload as Parameters<typeof buildLedgerXml>[0]
-      // Stagger the clicks; browsers drop rapid-fire programmatic downloads.
-      setTimeout(() => {
-        downloadText(
-          `${p.ledgerName || 'ledger'}-tally.xml`,
-          buildLedgerXml(p),
-          'application/xml',
-        )
-      }, i * 300)
-    })
-  }
-
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1">
-          {TABS.map((t) => {
-            const count =
-              t.key === 'all'
-                ? requests.length
-                : requests.filter((r) => r.status === t.key).length
-            return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-                  tab === t.key
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {t.label} ({count})
-              </button>
-            )
-          })}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={exportCsv}
-            disabled={filtered.length === 0}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            ⬇ Export CSV
-          </button>
-          <button
-            onClick={exportAllXml}
-            disabled={ledgerReady.length === 0}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-50"
-          >
-            ⬇ Tally XML ({ledgerReady.length})
-          </button>
-        </div>
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+        <button
+          onClick={exportCsv}
+          disabled={filtered.length === 0}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          ⬇ Export CSV
+        </button>
+        {/* One consolidated import file for every approved ledger below. */}
+        <TallyBundleButton requests={filtered} />
       </div>
+
+      <StatusTabs requests={requests} active={tab} onSelect={setTab} />
 
       <input
         type="search"
