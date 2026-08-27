@@ -5,7 +5,9 @@ import { Badge } from './ui'
 export default function Layout() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
-  const isApprover = profile?.role === 'approver'
+  const isAdmin = profile?.role === 'admin'
+  // Admins inherit every approver right (see is_approver() in the database).
+  const canApprove = profile?.role === 'approver' || isAdmin
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `rounded-md px-3 py-2 text-sm font-medium transition ${
@@ -18,6 +20,29 @@ export default function Layout() {
     await signOut()
     navigate('/login')
   }
+
+  const navLinks = (
+    <>
+      <NavLink to="/controls" className={linkClass}>
+        Controls
+      </NavLink>
+      <NavLink to="/my-requests" className={linkClass}>
+        My Requests
+      </NavLink>
+      {canApprove && (
+        <NavLink to="/approvals" className={linkClass}>
+          Approvals
+        </NavLink>
+      )}
+      {isAdmin && (
+        <NavLink to="/admin" className={linkClass}>
+          Admin
+        </NavLink>
+      )}
+    </>
+  )
+
+  const roleColor = isAdmin ? 'red' : canApprove ? 'purple' : 'slate'
 
   return (
     <div className="min-h-full">
@@ -32,19 +57,7 @@ export default function Layout() {
                 IC Control Hub
               </span>
             </NavLink>
-            <nav className="hidden items-center gap-1 sm:flex">
-              <NavLink to="/controls" className={linkClass}>
-                Controls
-              </NavLink>
-              <NavLink to="/my-requests" className={linkClass}>
-                My Requests
-              </NavLink>
-              {isApprover && (
-                <NavLink to="/approvals" className={linkClass}>
-                  Approvals
-                </NavLink>
-              )}
-            </nav>
+            <nav className="hidden items-center gap-1 sm:flex">{navLinks}</nav>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
@@ -52,9 +65,7 @@ export default function Layout() {
                 {profile?.full_name ?? profile?.email}
               </div>
               <div className="text-xs text-slate-500">
-                <Badge color={isApprover ? 'purple' : 'slate'}>
-                  {profile?.role ?? '—'}
-                </Badge>
+                <Badge color={roleColor}>{profile?.role ?? '—'}</Badge>
               </div>
             </div>
             <button
@@ -66,18 +77,8 @@ export default function Layout() {
           </div>
         </div>
         {/* mobile nav */}
-        <nav className="flex items-center gap-1 border-t border-slate-100 px-4 py-2 sm:hidden">
-          <NavLink to="/controls" className={linkClass}>
-            Controls
-          </NavLink>
-          <NavLink to="/my-requests" className={linkClass}>
-            My Requests
-          </NavLink>
-          {isApprover && (
-            <NavLink to="/approvals" className={linkClass}>
-              Approvals
-            </NavLink>
-          )}
+        <nav className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-4 py-2 sm:hidden">
+          {navLinks}
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">

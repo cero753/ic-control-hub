@@ -7,6 +7,10 @@ import ControlDetail from './pages/ControlDetail'
 import RaiseRequest from './pages/RaiseRequest'
 import MyRequests from './pages/MyRequests'
 import Approvals from './pages/Approvals'
+import AdminLayout from './pages/admin/AdminLayout'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminRequests from './pages/admin/AdminRequests'
+import AdminControls from './pages/admin/AdminControls'
 
 export default function App() {
   return (
@@ -31,6 +35,18 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminUsers />} />
+          <Route path="requests" element={<AdminRequests />} />
+          <Route path="controls" element={<AdminControls />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/controls" replace />} />
     </Routes>

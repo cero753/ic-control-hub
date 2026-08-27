@@ -93,7 +93,9 @@ export function RequestCard({
         </div>
       )}
 
-      {isLedger && req.status === 'approved' && (
+      {/* Available to whoever can see the request — requestor, approver and admin
+          all need the file to verify or complete the Tally import. */}
+      {isLedger && (req.status === 'approved' || req.status === 'completed') && (
         <button
           onClick={handleDownload}
           className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900"

@@ -1,4 +1,22 @@
-export type Role = 'requestor' | 'approver'
+export type Role = 'requestor' | 'approver' | 'admin'
+
+export const ROLES: { value: Role; label: string; description: string }[] = [
+  {
+    value: 'requestor',
+    label: 'Requestor',
+    description: 'Raises requests against controls and acts on them in Tally.',
+  },
+  {
+    value: 'approver',
+    label: 'Approver',
+    description: 'Reviews and approves or rejects every request.',
+  },
+  {
+    value: 'admin',
+    label: 'Administrator',
+    description: 'Full access — manages users, roles and all request data.',
+  },
+]
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'completed'
 
